@@ -13,7 +13,7 @@ if dataset_name != "Ваш файл(.CSV)":
 else:
     uploaded_file = st.file_uploader("Завантажте CSV файл з ЛР 1")
     if uploaded_file is not None:
-         df = pd.read_csv(uploaded_file, sep=';', decimal=',')
+         df = pd.read_csv(uploaded_file, decimal=',')
     else:
          st.stop()
 
