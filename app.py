@@ -3,7 +3,7 @@ import pandas as pd
 import seaborn as sns
 import matplotlib.pyplot as plt
 
-st.title("Лабораторна робота: Описова статистика")
+st.title("Описова статистика")
 
 # 1. Завантаження даних (імітація репозиторію)
 #dataset_name = st.selectbox("Оберіть набір даних:", ["titanic", "iris", "Ваш файл з ЛР 1"])
