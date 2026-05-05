@@ -8,7 +8,7 @@ st.title("Лабораторна робота: Описова статистик
 dataset_name = st.selectbox("Оберіть набір даних:", ["titanic", "iris", "penguins", "Ваш файл(.CSV)"])
 #dataset_name = st.selectbox("Оберіть набір даних:", sns.get_dataset_names())
 
-if dataset_name != "Ваш файл":
+if dataset_name != "Ваш файл(.CSV)":
     df = sns.load_dataset(dataset_name)
 else:
     uploaded_file = st.file_uploader("Завантажте CSV файл з ЛР 1")
