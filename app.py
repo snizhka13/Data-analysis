@@ -18,7 +18,7 @@ elif dataset_name == "penguins":
 if dataset_name != "Ваш файл(.CSV)":
     df = sns.load_dataset(dataset_name)
 else:
-    uploaded_file = st.file_uploader("Завантажте CSV файл з ЛР 1")
+    uploaded_file = st.file_uploader("Завантажте CSV файл")
     if uploaded_file is not None:
          df = pd.read_csv(uploaded_file, decimal=',')
     else:
