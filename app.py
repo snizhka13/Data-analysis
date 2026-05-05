@@ -3,7 +3,7 @@ import pandas as pd
 import seaborn as sns
 import matplotlib.pyplot as plt
 
-st.title("Лабораторна робота: Описова статистика")
+st.title("Описова статистика")
 
 dataset_name = st.selectbox("Оберіть набір даних:", ["titanic", "iris", "penguins", "Ваш файл(.CSV)"])
 #dataset_name = st.selectbox("Оберіть набір даних:", sns.get_dataset_names())
