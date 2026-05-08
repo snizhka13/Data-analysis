@@ -339,18 +339,16 @@ elif app_mode == "Комплексний кластерний аналіз":
     st.subheader(f"Результати розподілу (k={k_choice})")
     st.dataframe(df_cluster)
 
-    st.subheader("Профілі кластерів (Характеристики)")
-    centers = scaler.inverse_transform(kmeans.cluster_centers_)
+    st.subheader("2. Профілі кластерів (Характеристики)")
+    centers = kmeans.cluster_centers_
     feature_names = df_cluster.iloc[:, 1:].select_dtypes(include=['number']).columns[:centers.shape[1]]
-    df_centers = pd.DataFrame(centers, columns=feature_names)
-    df_centers['Кластер'] = [f'Кластер {i}' for i in range(k_choice)]
-
-    fig_profile, ax_profile = plt.subplots(figsize=(8, 4))
+    fig_profile, ax_profile = plt.subplots(figsize=(10, 5))
+    ax_profile.axhline(0, color='black', linestyle='--', linewidth=1, alpha=0.5)
     for i in range(k_choice):
         ax_profile.plot(feature_names, centers[i], marker='s', label=f'Кластер {i}')
 
-    ax_profile.set_title("Профілі середніх значень для кожного кластера [cite: 107]")
-    ax_profile.set_ylabel("Значення показників")
+    ax_profile.set_title("Профілі середніх значень для кожного кластера (Стандартизовані дані)")
+    ax_profile.set_ylabel("Відхилення від середнього (Z-score)")
     plt.xticks(rotation=45)
     plt.legend()
     plt.grid(True, alpha=0.3)
@@ -376,7 +374,7 @@ elif app_mode == "Комплексний кластерний аналіз":
                  placeholder="Наприклад: Результати більшою мірою збігаються. Країни 'А' та 'Б' в обох методах потрапили до однієї групи, проте об'єкт 'В' за ієрархічним методом віднесено до іншої групи через...")
     st.subheader("Загальний висновок:")
     st.markdown("""
-        - Метод k-середніх чутливий до вибору початкових центрів, але дає чіткіший поділ на великих даних[cite: 91].
-        - Ієрархічний метод дозволяє візуально побачити 'спорідненість' об'єктів через дендрограму[cite: 27].
-        - Узгодженість результатів двох методів свідчить про **достовірність** виділеної структури даних[cite: 19, 122].
+        - Метод k-середніх чутливий до вибору початкових центрів, але дає чіткіший поділ на великих даних.
+        - Ієрархічний метод дозволяє візуально побачити 'спорідненість' об'єктів через дендрограму.
+        - Узгодженість результатів двох методів свідчить про **достовірність** виділеної структури даних.
         """)
