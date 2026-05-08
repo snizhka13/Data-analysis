@@ -323,7 +323,7 @@ elif app_mode == "Комплексний кластерний аналіз":
         kmeans_temp.fit(scaled_features)
         wcss.append(kmeans_temp.inertia_)
 
-    fig_elbow, ax_elbow = plt.subplots(figsize=(7, 4))
+    fig_elbow, ax_elbow = plt.subplots(figsize=(8, 4))
     ax_elbow.plot(range(1, 11), wcss, marker='o', linestyle='--')
     ax_elbow.set_title('Метод ліктя (Elbow Method)')
     ax_elbow.set_xlabel('Кількість кластерів (k)')
@@ -345,7 +345,7 @@ elif app_mode == "Комплексний кластерний аналіз":
     df_centers = pd.DataFrame(centers, columns=feature_names)
     df_centers['Кластер'] = [f'Кластер {i}' for i in range(k_choice)]
 
-    fig_profile, ax_profile = plt.subplots(figsize=(10, 5))
+    fig_profile, ax_profile = plt.subplots(figsize=(8, 4))
     for i in range(k_choice):
         ax_profile.plot(feature_names, centers[i], marker='s', label=f'Кластер {i}')
 
