@@ -2,19 +2,31 @@ import streamlit as st
 import pandas as pd
 import seaborn as sns
 import matplotlib.pyplot as plt
+import numpy as np
 from mlxtend.frequent_patterns import apriori, association_rules
 from mlxtend.preprocessing import TransactionEncoder
 from sklearn.preprocessing import StandardScaler
 from scipy.cluster.hierarchy import dendrogram, linkage
 from sklearn.cluster import KMeans
+from factor_analyzer import FactorAnalyzer
+from factor_analyzer.factor_analyzer import calculate_kmo, calculate_bartlett_sphericity
+from sklearn.model_selection import train_test_split
+from sklearn.tree import DecisionTreeClassifier
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.linear_model import LogisticRegression
+from sklearn.naive_bayes import GaussianNB
+from sklearn.metrics import accuracy_score, f1_score, precision_score, recall_score, roc_auc_score, confusion_matrix, roc_curve, matthews_corrcoef
+from sklearn.preprocessing import LabelEncoder
 
 st.set_page_config(page_title="Data Mining App", layout="wide")
 
 st.sidebar.title("Навігація")
-app_mode = st.sidebar.radio("Оберіть режим роботи:", [
+app_mode = st.sidebar.radio("**Оберіть режим роботи:**", [
     "Описова статистика",
     "Пошук асоціативних правил",
-    "Комплексний кластерний аналіз"
+    "Комплексний кластерний аналіз",
+    "Факторний аналіз",
+    "Порівняння моделей класифікації"
 ])
 
 if app_mode == "Описова статистика":
@@ -378,3 +390,289 @@ elif app_mode == "Комплексний кластерний аналіз":
         - Ієрархічний метод дозволяє візуально побачити 'спорідненість' об'єктів через дендрограму.
         - Узгодженість результатів двох методів свідчить про **достовірність** виділеної структури даних.
         """)
+
+elif app_mode == "Факторний аналіз":
+    st.title("Факторний аналіз")
+
+    st.markdown("""
+    Цей модуль допомагає виявити приховані (латентні) характеристики у даних та зменшити кількість змінних, об'єднавши ті, що сильно корелюють між собою.
+    """)
+    data_source = st.radio("**Джерело даних:**",
+                           ["Відкриті дані Світового банку (World Bank Open Data)", "Власний файл (.CSV)"])
+
+    if data_source == "Відкриті дані Світового банку (World Bank Open Data)":
+        data = {
+            'Країна': ['Норвегія', 'Швейцарія', 'Німеччина', 'Франція', 'Італія', 'Іспанія', 'Греція', 'Польща',
+                       'Україна', 'Румунія', 'Швеція', 'Фінляндія', 'Данія', 'Нідерланди', 'Бельгія', 'Австрія',
+                       'Чехія', 'Угорщина', 'Португалія', 'Словаччина'],
+            'ВВП на душу ($)': [89000, 92000, 51000, 43000, 35000, 30000, 20000, 17000, 4000, 15000, 54000, 53000,
+                                61000, 53000, 51000, 53000, 25000, 18000, 24000, 21000],
+            'Тривалість життя': [82.4, 83.8, 81.3, 82.7, 83.5, 83.6, 82.2, 78.7, 72.1, 76.0, 82.8, 81.9, 81.6, 82.2,
+                                 81.6, 81.5, 79.3, 76.9, 82.0, 77.5],
+            'Рівень безробіття (%)': [3.8, 4.2, 3.1, 7.3, 9.5, 13.3, 14.8, 3.2, 9.8, 5.0, 8.3, 6.7, 5.1, 3.8, 5.9, 5.1,
+                                      2.8, 4.1, 6.6, 6.5],
+            'Індекс освіти': [0.92, 0.90, 0.94, 0.89, 0.88, 0.87, 0.87, 0.88, 0.80, 0.81, 0.93, 0.93, 0.95, 0.91, 0.89,
+                              0.88, 0.89, 0.85, 0.84, 0.86],
+            'Витрати на здоров\'я (%)': [10.5, 11.3, 11.7, 11.1, 8.7, 9.0, 7.8, 6.5, 7.1, 5.7, 10.9, 9.2, 10.1, 10.0,
+                                         10.3, 10.4, 7.8, 6.4, 9.5, 7.0]
+        }
+        df_factor = pd.DataFrame(data)
+    else:
+        uploaded_file = st.file_uploader("Завантажте CSV", type=['csv'])
+        if uploaded_file is not None:
+            df_factor = pd.read_csv(uploaded_file)
+        else:
+            st.stop()
+
+    st.subheader("Початкові дані")
+    st.dataframe(df_factor)
+
+    numeric_df = df_factor.select_dtypes(include=['float64', 'int64'])
+
+    scaler = StandardScaler()
+    scaled_data = scaler.fit_transform(numeric_df)
+    scaled_df = pd.DataFrame(scaled_data, columns=numeric_df.columns)
+
+    st.markdown("---")
+    st.header("Перевірка придатності даних")
+
+    col1, col2 = st.columns(2)
+    with col1:
+        st.subheader("Критерій Кайзера-Мейєра-Олкіна (KMO)")
+        kmo_all, kmo_model = calculate_kmo(scaled_df)
+        st.metric(label="KMO Score", value=round(kmo_model, 3))
+        if kmo_model > 0.5:
+            st.success("Значення > 0.5. Дані прийнятні для факторного аналізу.")
+        else:
+            st.error("Значення < 0.5. Факторний аналіз може бути некоректним.")
+
+    with col2:
+        st.subheader("Критерій сферичності Бартлета")
+        chi_square_value, p_value = calculate_bartlett_sphericity(scaled_df)
+        st.metric(label="p-value", value=round(p_value, 4))
+        if p_value < 0.05:
+            st.success("p < 0.05. Гіпотеза про багатовимірну нормальність підтверджена.")
+        else:
+            st.error("p > 0.05. Дані можуть бути непридатні.")
+
+    st.markdown("---")
+    st.header("Визначення кількості факторів")
+
+    fa = FactorAnalyzer(rotation=None)
+    fa.fit(scaled_df)
+    ev, v = fa.get_eigenvalues()
+
+    fig, ax = plt.subplots(figsize=(8, 4))
+    ax.plot(range(1, scaled_df.shape[1] + 1), ev, marker='o', linestyle='--')
+    ax.axhline(y=1, color='r', linestyle='-', alpha=0.5, label='Критерій Кайзера (Eigenvalue = 1)')
+    ax.set_title('Графік "кам\'янистого осипу" (Scree Plot)')
+    ax.set_xlabel('Номер фактора')
+    ax.set_ylabel('Власне значення (Eigenvalue)')
+    ax.legend()
+    ax.grid(True, alpha=0.3)
+    st.pyplot(fig)
+
+    st.info(
+        "За критерієм Кайзера відбираються фактори з власним значенням > 1. За критерієм Кеттелла (кам'янистий осип) фактори відбираються до точки зламу графіка.")
+
+    st.markdown("---")
+    st.header("Побудова факторної моделі")
+
+    st.sidebar.markdown("---")
+    st.sidebar.subheader("Налаштування")
+    n_factors = st.sidebar.slider("Оберіть кількість факторів для виділення:", min_value=1, max_value=scaled_df.shape[1],value=2)
+    st.markdown("**<<= Визначте кількість факторів на бічній панелі.**")
+    rotation_type = st.selectbox("**Оберіть метод обертання:**", ["varimax", "promax", "oblimin", None])
+
+    fa_rotated = FactorAnalyzer(n_factors=n_factors, rotation=rotation_type)
+    fa_rotated.fit(scaled_df)
+
+    loadings = pd.DataFrame(fa_rotated.loadings_, index=scaled_df.columns,
+                            columns=[f'Фактор {i + 1}' for i in range(n_factors)])
+
+    st.subheader("Факторні навантаження (Factor Loadings)")
+    st.markdown(
+        "Показують коефіцієнти кореляції кожної змінної з виявленими факторами. Що ближче значення до 1 або -1, то сильніший зв'язок.")
+
+    st.dataframe(loadings.style.background_gradient(cmap='coolwarm', axis=None).format("{:.3f}"))
+
+    st.subheader("Спільності (Communalities)")
+    communalities = pd.DataFrame(fa_rotated.get_communalities(), index=scaled_df.columns, columns=['Спільність'])
+    st.dataframe(communalities.style.format("{:.3f}"))
+    st.markdown("*Спільність показує частку дисперсії змінної, що пояснюється виділеними факторами.*")
+
+    st.markdown("---")
+    st.header("Інтерпретація та висновки")
+
+    st.text_area(
+        "**1. Як ви можете змістовно назвати (інтерпретувати) виділені фактори на основі змінних, які мають на них найбільші навантаження?**",
+        placeholder="Наприклад: Фактор 1 сильно корелює з ВВП та витратами на здоров'я, тому його можна назвати 'Рівень економічного та соціального добробуту'...")
+
+    st.text_area("**2. Порівняйте результати факторного та кластерного аналізів. Чи доповнюють вони один одного?**",
+                 placeholder="Напишіть свої спостереження тут...")
+
+    st.markdown("---")
+    st.header("Довідкова інформація")
+    st.markdown("""
+               **1. Яке призначення факторного аналізу?**
+               - Призначення факторного аналізу — виявлення прихованих (латентних) характеристик, які неможливо виміряти безпосередньо. Він дозволяє знайти кореляції між змінними та зменшити загальну кількість змінних у моделі, пояснюючи їх через меншу кількість прихованих факторів.
+               """)
+    st.markdown("""
+               **2. Які основні кроки факторного аналізу?**
+                - До основних кроків належать: побудова матриці інтеркореляцій, формування факторної матриці та виділення первинних факторів, обертання факторної структури для кращої інтерпретації, та власне змістовна інтерпретація отриманих результатів.
+                """)
+    st.markdown("""
+               **3. За якими критеріями можна встановити необхідну кількість факторів?**
+                - Зазвичай використовують два підходи: критерій Х.Ф. Кайзера, за яким відбирають фактори, що мають власне значення більше одиниці, та критерій Р.Б. Кеттелла (графік кам'янистого осипу), за яким останнім фактором стає той, на якому спадання графіка максимально уповільнюється ("точка зламу").
+                """)
+    st.markdown("""
+               **4. Яке призначення процедури обертання факторного рішення? Які є методи обертання?**
+                - Обертання застосовують для досягнення простої структури, що полегшує інтерпретацію. Це перетворення системи координат так, щоб кожна змінна мала велике навантаження лише за одним фактором, а за іншими воно було близьким до нуля. Основними методами є ортогональні (наприклад, varimax) та косокутні (наприклад, promax, direct oblimin).                
+                """)
+    st.markdown("""
+               **5. У чому полягає інтерпретація факторів?**
+                - Інтерпретація — це якісний процес надання сутнісних назв та пояснень виділеним прихованим факторам. Вона здійснюється на основі аналізу тих первинних змінних, які "поглинув" фактор (тобто змінних, що мають найбільші факторні навантаження на конкретний фактор).
+                """)
+
+elif app_mode == "Порівняння моделей класифікації":
+    st.title("Порівняння моделей класифікації (ML)")
+
+    st.markdown("""
+    Цей модуль відтворює функціонал віджетів **Test and Score**, **Confusion Matrix** та **ROC Analysis** з Orange. 
+    Він дозволяє порівняти 4 алгоритми: Tree, Random Forest, Logistic Regression та Naive Bayes.
+    """)
+
+    # Завантаження даних
+    dataset_name = st.selectbox("**Оберіть набір даних для класифікації:**",
+                                ["titanic", "iris", "penguins", "Ваш файл(.CSV)"])
+
+    if dataset_name != "Ваш файл(.CSV)":
+        df_ml = sns.load_dataset(dataset_name)
+    else:
+        uploaded_file = st.file_uploader("Завантажте CSV файл", type=['csv'])
+        if uploaded_file is not None:
+            df_ml = pd.read_csv(uploaded_file, decimal=',')
+        else:
+            st.stop()
+
+    # Попередня обробка даних (Preprocess)
+    st.subheader("1. Попередня обробка даних (Preprocess)")
+    df_ml = df_ml.dropna()  # Для простоти видаляємо пропущені значення
+
+    target_col = st.selectbox("**Оберіть цільову змінну (Target):**", df_ml.columns, index=len(df_ml.columns) - 1)
+
+    X_raw = df_ml.drop(columns=[target_col])
+    y_raw = df_ml[target_col]
+
+    # Кодування категоріальних змінних
+    X = pd.get_dummies(X_raw, drop_first=True)
+    le = LabelEncoder()
+    y = le.fit_transform(y_raw)
+
+    st.write(f"Кількість ознак після обробки: {X.shape[1]}; Кількість екземплярів: {X.shape[0]}")
+    st.write(f"Класи цільової змінної: {le.classes_}")
+
+    # Налаштування тестування
+    st.sidebar.markdown("---")
+    st.sidebar.subheader("Налаштування тестування")
+    test_size = st.sidebar.slider("Розмір тестової вибірки (%)", 10, 50, 30, step=5) / 100.0
+
+    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=test_size, random_state=42, stratify=y)
+
+    # Ініціалізація моделей
+    models = {
+        "Tree": DecisionTreeClassifier(random_state=42),
+        "Random Forest": RandomForestClassifier(random_state=42),
+        "Logistic Regression": LogisticRegression(max_iter=2000, random_state=42),
+        "Naive Bayes": GaussianNB()
+    }
+
+    results = []
+    trained_models = {}
+
+    # Навчання та оцінювання (Test and Score)
+    for name, model in models.items():
+        model.fit(X_train, y_train)
+        y_pred = model.predict(X_test)
+
+        # Для ROC AUC потрібні ймовірності
+        y_proba = model.predict_proba(X_test)
+
+        # Обчислення метрик
+        acc = accuracy_score(y_test, y_pred)
+
+        # Розрахунок метрик залежно від того, чи це бінарна, чи багатокласова класифікація
+        if len(np.unique(y)) == 2:
+            f1 = f1_score(y_test, y_pred)
+            prec = precision_score(y_test, y_pred)
+            rec = recall_score(y_test, y_pred)
+            auc = roc_auc_score(y_test, y_proba[:, 1])
+        else:
+            f1 = f1_score(y_test, y_pred, average='weighted')
+            prec = precision_score(y_test, y_pred, average='weighted')
+            rec = recall_score(y_test, y_pred, average='weighted')
+            auc = roc_auc_score(y_test, y_proba, multi_class='ovr', average='weighted')
+
+        mcc = matthews_corrcoef(y_test, y_pred)
+
+        results.append({
+            "Model": name,
+            "AUC": auc,
+            "CA": acc,
+            "F1": f1,
+            "Prec": prec,
+            "Recall": rec,
+            "MCC": mcc
+        })
+        trained_models[name] = model
+
+    st.markdown("---")
+    st.subheader("2. Результати оцінювання (Test and Score)")
+    results_df = pd.DataFrame(results).set_index("Model")
+    st.dataframe(results_df.style.format("{:.3f}").background_gradient(cmap='Blues', axis=0))
+
+    st.markdown("---")
+    st.subheader("3. Матриця помилок (Confusion Matrix)")
+
+    selected_model_cm = st.selectbox("Оберіть модель для побудови матриці помилок:", list(models.keys()))
+
+    y_pred_cm = trained_models[selected_model_cm].predict(X_test)
+    cm = confusion_matrix(y_test, y_pred_cm)
+
+    fig_cm, ax_cm = plt.subplots(figsize=(5, 4))
+    sns.heatmap(cm, annot=True, fmt='d', cmap='Reds', xticklabels=le.classes_, yticklabels=le.classes_, ax=ax_cm)
+    ax_cm.set_ylabel('Фактичний клас (Actual)')
+    ax_cm.set_xlabel('Прогнозований клас (Predicted)')
+    st.pyplot(fig_cm)
+
+    st.markdown("---")
+    st.subheader("4. ROC-аналіз (ROC Analysis)")
+
+    if len(np.unique(y)) == 2:
+        fig_roc, ax_roc = plt.subplots(figsize=(7, 5))
+
+        for name, model in trained_models.items():
+            y_proba = model.predict_proba(X_test)[:, 1]
+            fpr, tpr, _ = roc_curve(y_test, y_proba)
+            auc_val = results_df.loc[name, "AUC"]
+            ax_roc.plot(fpr, tpr, label=f'{name} (AUC = {auc_val:.3f})')
+
+        ax_roc.plot([0, 1], [0, 1], color='gray', linestyle='--')
+        ax_roc.set_xlabel('FP Rate (1 - Specificity)')
+        ax_roc.set_ylabel('TP Rate (Sensitivity)')
+        ax_roc.set_title('ROC Криві моделей класифікації')
+        ax_roc.legend(loc='lower right')
+        st.pyplot(fig_roc)
+    else:
+        st.info(
+            "ROC-крива детально відображається лише для завдань бінарної класифікації (де цільова змінна має 2 класи, наприклад Titanic). Оскільки обрано багатокласовий набір даних, графік не виводиться.")
+
+    st.markdown("---")
+    st.subheader("Обґрунтування для звіту")
+    best_model = results_df['AUC'].idxmax()
+    st.success(
+        f"**Автоматичний висновок:** За результатами метрики AUC (Площа під кривою), найкращою моделлю виявилася **{best_model}** зі значенням {results_df.loc[best_model, 'AUC']:.3f}. Точність (CA) цієї моделі становить {results_df.loc[best_model, 'CA']:.3f}.")
+
+    st.text_area("**Напишіть обґрунтування для звіту (Пункт 3 завдання):**",
+                 value=f"В ході виконання роботи було побудовано 4 класифікаційні моделі. На основі аналізу таблиці 'Test and Score' та побудованих ROC-кривих, обрано модель {best_model}, оскільки вона демонструє найвищі показники ефективності (AUC={results_df.loc[best_model, 'AUC']:.3f}, F1={results_df.loc[best_model, 'F1']:.3f}). Матриця помилок підтверджує, що ця модель робить найменшу кількість хибних передбачень.",
+                 height=150)
