@@ -5,3 +5,4 @@ matplotlib
 mlxtend
 scikit-learn
 scipy
+factor-analyzer
