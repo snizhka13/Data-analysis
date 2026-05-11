@@ -3,6 +3,10 @@ import pandas as pd
 import seaborn as sns
 import matplotlib.pyplot as plt
 import numpy as np
+import wikipedia
+from wordcloud import WordCloud
+import re
+from sklearn.feature_extraction.text import CountVectorizer, TfidfVectorizer
 from mlxtend.frequent_patterns import apriori, association_rules
 from mlxtend.preprocessing import TransactionEncoder
 from sklearn.preprocessing import StandardScaler
@@ -26,7 +30,8 @@ app_mode = st.sidebar.radio("**Оберіть режим роботи:**", [
     "Пошук асоціативних правил",
     "Комплексний кластерний аналіз",
     "Факторний аналіз",
-    "Порівняння моделей класифікації"
+    "Порівняння моделей класифікації",
+    "Аналіз текстів"
 ])
 
 if app_mode == "Описова статистика":
@@ -737,3 +742,158 @@ elif app_mode == "Порівняння моделей класифікації":
     st.text_area("**Напишіть обґрунтування для звіту (Пункт 3 завдання):**",
                  value=f"В ході виконання роботи було побудовано 4 класифікаційні моделі. На основі аналізу таблиці 'Test and Score' та побудованих ROC-кривих, обрано модель {best_model}, оскільки вона демонструє найвищі показники ефективності (AUC={results_df.loc[best_model, 'AUC']:.3f}, F1={results_df.loc[best_model, 'F1']:.3f}). Матриця помилок підтверджує, що ця модель робить найменшу кількість хибних передбачень.",
                  height=150)
+
+elif app_mode == "Аналіз текстів":
+    st.title("Аналіз текстів (Text Mining)")
+
+    st.markdown("""
+    Цей модуль моделює роботу надбудови **Text** в Orange. Він дозволяє завантажувати тексти з Вікіпедії, 
+    проводити попередню обробку, створювати хмари слів, використовувати міру IDF та шукати конкорданси.
+    """)
+
+    st.header("Збір даних (Wikipedia)")
+    col1, col2, col3 = st.columns(3)
+    with col1:
+        search_query = st.text_input("Пошуковий запит:", value="аналіз даних")
+    with col2:
+        lang = st.selectbox("Мова:", ["uk", "en"], index=0)
+    with col3:
+        num_articles = st.slider("Кількість статей:", min_value=1, max_value=20, value=5)
+
+    if st.button("Завантажити тексти"):
+        with st.spinner('Шукаємо статті у Вікіпедії...'):
+            wikipedia.set_lang(lang)
+            search_results = wikipedia.search(search_query, results=num_articles)
+
+            docs = []
+            titles = []
+            for title in search_results:
+                try:
+                    page = wikipedia.page(title)
+                    docs.append(page.content)
+                    titles.append(title)
+                except wikipedia.exceptions.DisambiguationError as e:
+                    pass
+                except Exception as e:
+                    pass
+
+            st.session_state['docs'] = docs
+            st.session_state['titles'] = titles
+            st.success(f"Завантажено {len(docs)} документів!")
+
+    if 'docs' in st.session_state and len(st.session_state['docs']) > 0:
+        docs = st.session_state['docs']
+        titles = st.session_state['titles']
+
+        st.markdown("---")
+        st.header("Статистика документів (Statistics)")
+
+        stats_data = []
+        for i, doc in enumerate(docs):
+            word_count = len(re.findall(r'\w+', doc))
+            char_count = len(doc)
+            stats_data.append({"Документ": titles[i], "Word count": word_count, "Character count": char_count})
+
+        st.dataframe(pd.DataFrame(stats_data))
+
+        st.markdown("---")
+        st.header("Попередня обробка та Хмара слів (Raw)")
+
+        raw_text = " ".join(docs).lower()
+        words = re.findall(r'\w+', raw_text)
+
+        word_counts = pd.Series(words).value_counts()
+
+        col1, col2 = st.columns([1, 2])
+        with col1:
+            st.subheader("Частотна таблиця")
+            st.dataframe(word_counts.head(20).rename_axis("Слово").reset_index(name="Частота"))
+
+        with col2:
+            st.subheader("Word Cloud (Первинна)")
+            wordcloud_raw = WordCloud(width=800, height=400, background_color='white', stopwords=set()).generate(raw_text)
+            fig, ax = plt.subplots(figsize=(8, 4))
+            ax.imshow(wordcloud_raw, interpolation='bilinear')
+            ax.axis('off')
+            st.pyplot(fig)
+            st.info(
+                "Як бачимо, найчастішими словами є сполучники, артиклі та прийменники. Вони не несуть змістового навантаження.")
+
+        st.markdown("---")
+        st.header("Фільтрація (Stopwords) та IDF")
+
+        uk_stopwords = set(
+            ["і", "в", "на", "з", "що", "до", "як", "а", "це", "за", "та", "про", "для", "від", "не", "я", "й", "але",
+             "чи", "ми", "вони", "він", "вона", "воно", "його", "її", "їх", "є", "був", "була", "були", "буде",
+             "тільки", "щоб", "бо", "або", "якщо", "їй", "йому", "мене", "тебе", "нас", "вас", "їм", "по", "із", "у",
+             "об", "під", "над", "перед", "після", "між", "при", "через", "то", "же", "ж", "ну", "от", "так", "ні",
+             "їхній"])
+        from sklearn.feature_extraction.text import ENGLISH_STOP_WORDS
+
+        stop_words_set = uk_stopwords if lang == "uk" else set(ENGLISH_STOP_WORDS)
+
+        custom_stopwords = st.text_input("Додаткові стоп-слова (через кому):",
+                                         placeholder="наприклад: could, would, said")
+        if custom_stopwords:
+            stop_words_set.update([w.strip().lower() for w in custom_stopwords.split(",")])
+
+        st.markdown("""
+        Застосуємо видалення стоп-слів та **Bag of Words з IDF (Зворотна частота документа)**. 
+        Це надасть більшої ваги словам, які є унікальними для конкретних документів.
+        """)
+
+        vectorizer = TfidfVectorizer(stop_words=list(stop_words_set), token_pattern=r'(?u)\b\w+\b')
+        tfidf_matrix = vectorizer.fit_transform(docs)
+
+        feature_names = vectorizer.get_feature_names_out()
+        tfidf_scores = tfidf_matrix.sum(axis=0).A1
+        idf_word_weights = dict(zip(feature_names, tfidf_scores))
+
+        sorted_idf = sorted(idf_word_weights.items(), key=lambda x: x[1], reverse=True)
+        idf_df = pd.DataFrame(sorted_idf, columns=["Слово", "IDF Вага"])
+
+        col3, col4 = st.columns([1, 2])
+        with col3:
+            st.subheader("Таблиця (TF-IDF Ваги)")
+            st.dataframe(idf_df.head(20).style.format({'IDF Вага': "{:.3f}"}))
+
+        with col4:
+            st.subheader("Word Cloud (Filtered + IDF)")
+            wordcloud_idf = WordCloud(width=800, height=400, background_color='white').generate_from_frequencies(
+                idf_word_weights)
+            fig2, ax2 = plt.subplots(figsize=(8, 4))
+            ax2.imshow(wordcloud_idf, interpolation='bilinear')
+            ax2.axis('off')
+            st.pyplot(fig2)
+
+        st.markdown("---")
+        st.header("Контекст слова (Concordance)")
+        st.markdown("Віджет знаходить у тексті запитуване слово та відображає контекст, у якому воно використовується.")
+
+        search_word = st.text_input("Введіть слово для пошуку (наприклад, 'дані'):", value="дані").lower()
+        context_words = st.number_input("Кількість слів контексту з кожного боку:", min_value=1, max_value=10, value=3)
+
+        if search_word:
+            concordance_results = []
+            for i, doc in enumerate(docs):
+                words_in_doc = re.findall(r'\w+', doc.lower())
+                for idx, w in enumerate(words_in_doc):
+                    if w == search_word:
+                        start_idx = max(0, idx - context_words)
+                        end_idx = min(len(words_in_doc), idx + context_words + 1)
+
+                        left_context = " ".join(words_in_doc[start_idx:idx])
+                        right_context = " ".join(words_in_doc[idx + 1:end_idx])
+
+                        concordance_results.append({
+                            "Лівий контекст": left_context,
+                            "Слово": w,
+                            "Правий контекст": right_context,
+                            "Документ": titles[i]
+                        })
+
+            if concordance_results:
+                st.dataframe(pd.DataFrame(concordance_results))
+                st.success(f"Знайдено {len(concordance_results)} збігів у документах.")
+            else:
+                st.warning("Слово не знайдено.")
