@@ -22,6 +22,8 @@ from sklearn.naive_bayes import GaussianNB
 from sklearn.metrics import accuracy_score, f1_score, precision_score, recall_score, roc_auc_score, confusion_matrix, roc_curve, matthews_corrcoef
 from sklearn.preprocessing import LabelEncoder
 
+wikipedia.set_user_agent("MyStreamlitApp/1.0 (greksnizana04@gmail.com)")
+
 st.set_page_config(page_title="Data Mining App", layout="wide")
 
 st.sidebar.title("Навігація")
