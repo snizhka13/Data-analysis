@@ -6,3 +6,5 @@ mlxtend
 scikit-learn<1.6.0
 scipy
 factor-analyzer
+wikipedia
+wordcloud
